@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { calculateDaysLeft } from '../utils/calculations';
 import { getLowInventoryItems, getUpcomingBills } from '../utils/reminders';
 
-const API_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+const DEFAULT_DIRECT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
+const PROXY_ENDPOINT = import.meta.env.VITE_ASSISTANT_ENDPOINT ?? '/.netlify/functions/chat';
+const API_ENDPOINT = !import.meta.env.DEV || import.meta.env.VITE_ASSISTANT_ENDPOINT ? PROXY_ENDPOINT : DEFAULT_DIRECT_ENDPOINT;
 
 const LOCATION_META = {
   pantry: { label: 'Pantry', icon: '🥫' },
@@ -122,24 +124,27 @@ Current points: ${points}. Current streak: ${streak} days. Level: ${level}. Prov
     setError('');
 
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+    const isProxy = API_ENDPOINT !== DEFAULT_DIRECT_ENDPOINT;
 
-    if (!apiKey) {
+    if (!isProxy && !apiKey) {
       setMessages([...conversation, {
-        id: `assistant-error-${Date.now()}`,
+        id: `assistant-error-${Date.now()}` ,
         role: 'assistant',
-        content: 'OpenAI API key is missing. Add VITE_OPENAI_API_KEY to your environment to enable the assistant.',
+        content: 'Assistant offline: add VITE_OPENAI_API_KEY or configure VITE_ASSISTANT_ENDPOINT.',
       }]);
       setIsLoading(false);
       return;
     }
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (!isProxy) {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
+
       const response = await fetch(API_ENDPOINT, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers,
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           temperature: 0.4,

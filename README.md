@@ -26,6 +26,7 @@ Create a `.env` file in the project root with your OpenAI API key:
 
 ```
 VITE_OPENAI_API_KEY=sk-your-key-here
+VITE_ASSISTANT_ENDPOINT=/.netlify/functions/chat
 ```
 
 The assistant uses `import.meta.env.VITE_OPENAI_API_KEY` to authorize requests to `https://api.openai.com/v1/chat/completions`.
