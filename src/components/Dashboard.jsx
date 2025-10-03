@@ -27,6 +27,7 @@ function HealthBar({ health }) {
       <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
         Status: {health.status === 'secure' ? '🟢 Secure' : health.status === 'watch' ? '🟡 Watch out' : '🔴 Take action today'}
       </p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Personal momentum: {Math.round((health.goalMomentum ?? 1) * 100)}%</p>
     </div>
   );
 }
@@ -128,6 +129,48 @@ function Badges({ badges }) {
   );
 }
 
+function GoalHighlights({ goals }) {
+  if (!goals.length) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400">
+        Add a few missions to track personal growth alongside your household tasks.
+      </div>
+    );
+  }
+
+  const sorted = [...goals].sort((a, b) => {
+    const aRatio = Math.min(1, Number(a.progress ?? 0) / Math.max(1, Number(a.target ?? 1)));
+    const bRatio = Math.min(1, Number(b.progress ?? 0) / Math.max(1, Number(b.target ?? 1)));
+    return aRatio - bRatio;
+  });
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Personal Growth Tracker</h3>
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Keep these missions moving to boost household health.</p>
+      <div className="mt-4 space-y-3">
+        {sorted.slice(0, 4).map((goal) => {
+          const target = Math.max(1, Number(goal.target ?? 1));
+          const progress = Math.max(0, Number(goal.progress ?? 0));
+          const percent = Math.min(100, Math.round((progress / target) * 100));
+          return (
+            <div key={goal.id} className="space-y-1">
+              <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                <span>{goal.name}</span>
+                <span>{percent}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-800">
+                <div className="h-full rounded-full bg-brand-light" style={{ width: `${percent}%` }} />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{progress}{goal.unit ? ` ${goal.unit}` : ''} / {goal.target}{goal.unit ? ` ${goal.unit}` : ''} · {goal.cadence}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LocationSummary({ inventory }) {
   const groups = inventory.reduce((acc, item) => {
     const bucket = item.location ?? 'other';
@@ -215,6 +258,7 @@ function TeamSummary({ members }) {
 export default function Dashboard({
   inventory,
   bills,
+  goals = [],
   lowItems,
   upcomingBills,
   gamification,

@@ -47,6 +47,22 @@ function buildInventoryContext(items) {
   return `${lines.join('\n')}\n${lowSummary}`;
 }
 
+function buildGoalsContext(goals) {
+  if (!goals.length) {
+    return 'No personal goals tracked yet.';
+  }
+
+  const lines = goals.map((goal) => {
+    const target = goal.target ?? 0;
+    const progress = goal.progress ?? 0;
+    const percent = target > 0 ? Math.min(100, Math.round((progress / target) * 100)) : 0;
+    const status = percent >= 100 ? 'complete' : percent >= 50 ? 'on track' : 'needs attention';
+    return `${goal.name} — ${percent}% (${progress}/${target}${goal.unit ? ` ${goal.unit}` : ''}), cadence: ${goal.cadence}, status: ${status}`;
+  });
+
+  return lines.join('\n');
+}
+
 function buildBillsContext(bills) {
   if (!bills.length) {
     return 'No bills are tracked right now.';
@@ -78,19 +94,20 @@ function buildBillsContext(bills) {
   return `${lines.join('\n')}\n${upcomingSummary}`;
 }
 
-export default function Assistant({ inventory, bills, points = 0, streak = 0, level = "Bronze", onReminderAcknowledged }) {
+export default function Assistant({ inventory, bills, goals = [], points = 0, streak = 0, level = "Bronze", onReminderAcknowledged }) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const personaContext = `You are an enthusiastic game master who narrates household logistics like epic quests.
-Current points: ${points}. Current streak: ${streak} days. Level: ${level}. Provide positive reinforcement, loss-aversion nudges, and titles like Guardian of Supplies or Bill Buster.`;
+Current points: ${points}. Current streak: ${streak} days. Level: ${level}. Provide positive reinforcement, loss-aversion nudges, and titles like Guardian of Supplies or Bill Buster. Encourage momentum on personal goals when progress falls behind.`;
   const contextMessage = useMemo(() => {
     const inventoryContext = buildInventoryContext(inventory);
     const billsContext = buildBillsContext(bills);
-    return `${personaContext}\n\nInventory snapshot:\n${inventoryContext}\n\nBills snapshot:\n${billsContext}`;
-  }, [inventory, bills, personaContext]);
+    const goalsContext = buildGoalsContext(goals);
+    return `${personaContext}\n\nInventory snapshot:\n${inventoryContext}\n\nBills snapshot:\n${billsContext}\n\nGoals briefing:\n${goalsContext}`;
+  }, [inventory, bills, goals, personaContext]);
 
   const sendMessage = async (event) => {
     event.preventDefault();

@@ -4,17 +4,20 @@ import Inventory from './components/Inventory.jsx';
 import Bills from './components/Bills.jsx';
 import Assistant from './components/Assistant.jsx';
 import Household from './components/Household.jsx';
+import Goals from './components/Goals.jsx';
 import {
   loadBills,
   loadInventory,
   loadPreferences,
   loadGamification,
   loadMembers,
+  loadGoals,
   saveBills,
   saveInventory,
   savePreferences,
   saveGamification,
   saveMembers,
+  saveGoals,
 } from './utils/storage.js';
 import {
   checkAndNotifyReminders,
@@ -30,6 +33,7 @@ import {
   getStreakMessage,
   initialGamificationState,
   registerBillPaid,
+  registerGoalMilestone,
   registerInventoryEvent,
   registerReminderResponse,
   updateStreak,
@@ -40,6 +44,7 @@ const VIEWS = {
   HOME: 'home',
   INVENTORY: 'inventory',
   BILLS: 'bills',
+  GOALS: 'goals',
   HOUSEHOLD: 'household',
   ASSISTANT: 'assistant',
 };
@@ -48,6 +53,7 @@ const NAVIGATION = [
   { id: VIEWS.HOME, label: 'Home' },
   { id: VIEWS.INVENTORY, label: 'Inventory' },
   { id: VIEWS.BILLS, label: 'Bills' },
+  { id: VIEWS.GOALS, label: 'Personal Goals' },
   { id: VIEWS.HOUSEHOLD, label: 'Household' },
   { id: VIEWS.ASSISTANT, label: 'Assistant' },
 ];
@@ -63,6 +69,7 @@ export default function App() {
   const [inventory, setInventory] = useState(() => normalizeInventory(loadInventory()));
   const [bills, setBills] = useState(() => loadBills());
   const [members, setMembers] = useState(() => loadMembers());
+  const [goals, setGoals] = useState(() => loadGoals());
   const [activeView, setActiveView] = useState(VIEWS.HOME);
   const [isDarkMode, setIsDarkMode] = useState(() => loadPreferences().darkMode);
   const [notificationStatus, setNotificationStatus] = useState(() => {
@@ -88,6 +95,10 @@ export default function App() {
   useEffect(() => {
     saveMembers(members);
   }, [members]);
+
+  useEffect(() => {
+    saveGoals(goals);
+  }, [goals]);
 
   useEffect(() => {
     saveGamification(gamification);
@@ -116,13 +127,105 @@ export default function App() {
 
   const lowInventoryItems = useMemo(() => getLowInventoryItems(inventory), [inventory]);
   const upcomingBills = useMemo(() => getUpcomingBills(bills), [bills]);
-  const health = useMemo(() => calculateHouseholdHealth(inventory, bills), [inventory, bills]);
+  const health = useMemo(() => calculateHouseholdHealth(inventory, bills, goals), [inventory, bills, goals]);
 
   useEffect(() => {
     const overdueBills = bills.filter((bill) => daysUntil(bill.dueDate) < 0).length;
-    const hasIssues = lowInventoryItems.length > 0 || overdueBills > 0;
+    const goalMomentum = health.goalMomentum ?? 1;
+    const hasIssues = lowInventoryItems.length > 0 || overdueBills > 0 || goalMomentum < 0.6;
     setGamification((prev) => updateStreak(evaluateBadges(prev, inventory, bills), { hasIssues }));
-  }, [inventory, bills, lowInventoryItems.length]);
+  }, [inventory, bills, goals, lowInventoryItems.length, health.goalMomentum]);
+
+  const getGoalPeriodKey = (goal, referenceDate = new Date()) => {
+    const date = new Date(referenceDate);
+    if (Number.isNaN(date.getTime())) return null;
+    if (goal?.cadence === 'daily') {
+      return date.toISOString().slice(0, 10);
+    }
+    if (goal?.cadence === 'monthly') {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
+    const temp = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = temp.getUTCDay() || 7;
+    temp.setUTCDate(temp.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(temp.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil(((temp - yearStart) / 86400000 + 1) / 7);
+    return `${temp.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+  };
+
+  const handleUpsertGoal = (goal) => {
+    const normalized = {
+      ...goal,
+      target: Number(goal.target ?? 0),
+      progress: Number(goal.progress ?? 0),
+      streak: Number(goal.streak ?? 0),
+      updatedAt: new Date().toISOString(),
+    };
+    setGoals((prev) => {
+      const exists = prev.some((existing) => existing.id === normalized.id);
+      return exists
+        ? prev.map((existing) => (existing.id === normalized.id ? { ...existing, ...normalized } : existing))
+        : [...prev, normalized];
+    });
+  };
+
+  const handleDeleteGoal = (id) => {
+    setGoals((prev) => prev.filter((goal) => goal.id !== id));
+  };
+
+  const handleLogGoalProgress = (id, amount) => {
+    const increment = Number(amount);
+    if (!Number.isFinite(increment) || increment <= 0) return;
+    let completedGoalName = null;
+    const now = new Date();
+    const periodKeyCache = {};
+
+    setGoals((prev) => prev.map((goal) => {
+      if (goal.id !== id) return goal;
+      const target = Number(goal.target ?? 0);
+      const previousProgress = Math.max(0, Number(goal.progress ?? 0));
+      const updatedProgress = previousProgress + increment;
+      const periodKey = periodKeyCache[goal.id] ?? getGoalPeriodKey(goal, now);
+      periodKeyCache[goal.id] = periodKey;
+      const alreadyCompleted = goal.lastCompletionPeriod && goal.lastCompletionPeriod === periodKey;
+      let nextProgress = updatedProgress;
+      let streak = goal.streak ?? 0;
+      let lastCompletedDate = goal.lastCompletedDate ?? null;
+      let lastCompletionPeriod = goal.lastCompletionPeriod ?? null;
+
+      if (target > 0 && updatedProgress >= target) {
+        nextProgress = target;
+        if (!alreadyCompleted) {
+          streak += 1;
+          lastCompletedDate = now.toISOString();
+          lastCompletionPeriod = periodKey;
+          completedGoalName = goal.name;
+        }
+      }
+
+      return {
+        ...goal,
+        progress: nextProgress,
+        streak,
+        lastCompletedDate,
+        lastCompletionPeriod,
+        updatedAt: now.toISOString(),
+      };
+    }));
+
+    if (completedGoalName) {
+      setGamification((prevState) => {
+        const updated = registerGoalMilestone(prevState, { goalName: completedGoalName });
+        return evaluateBadges(updated, inventory, bills);
+      });
+    }
+  };
+
+  const handleResetGoal = (id) => {
+    setGoals((prev) => prev.map((goal) => (goal.id === id
+      ? { ...goal, progress: 0, updatedAt: new Date().toISOString() }
+      : goal)));
+  };
 
   const handleUpsertItem = (item) => {
     setInventory((prev) => {
@@ -287,6 +390,16 @@ export default function App() {
             onMarkBillPaid={handleMarkBillPaid}
           />
         );
+      case VIEWS.GOALS:
+        return (
+          <Goals
+            goals={goals}
+            onUpsertGoal={handleUpsertGoal}
+            onDeleteGoal={handleDeleteGoal}
+            onLogProgress={handleLogGoalProgress}
+            onResetGoal={handleResetGoal}
+          />
+        );
       case VIEWS.HOUSEHOLD:
         return (
           <Household
@@ -302,6 +415,7 @@ export default function App() {
           <Assistant
             inventory={inventory}
             bills={bills}
+            goals={goals}
             points={gamification.points}
             streak={gamification.streak?.current ?? 0}
             level={gamification.level}
@@ -314,6 +428,7 @@ export default function App() {
           <Dashboard
             inventory={inventory}
             bills={bills}
+            goals={goals}
             lowItems={lowInventoryItems}
             upcomingBills={upcomingBills}
             gamification={gamification}
@@ -395,7 +510,7 @@ export default function App() {
         <footer className="mt-8 flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-500 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p>⚠️ Low supplies: {lowInventoryItems.length} · 💸 Bills due soon: {upcomingBills.length} · ⭐ Points: {gamification.points}</p>
-            <p className="text-xs">{streakMessage}</p>
+            <p className="text-xs">{streakMessage} · Personal momentum {Math.round((health.goalMomentum ?? 1) * 100)}%</p>
           </div>
         </footer>
       </div>

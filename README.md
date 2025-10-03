@@ -3,12 +3,13 @@
 Life Infrastructure Tracker is a Vite + React web app that turns household logistics into a cooperative RPG-style experience. Track essentials, stay ahead of bills, earn points, and collaborate with housemates—all with Tailwind styling and an OpenAI-powered game-master assistant. All data lives in LocalStorage for a lightweight, offline-friendly workflow.
 
 ## Features
-- **Gamified Dashboard** with a household health bar, points, levels, badges, and streak tracking.
+- **Gamified Dashboard** with a household health bar, points, levels, badges, streak tracking, and personal growth momentum.
 - **Essentials Inventory** CRUD with pantry/fridge/freezer locations, automatic "days left" math, and low-supply highlights.
 - **Bills & Utilities** management including mark-as-paid actions, urgency emojis, and reminders for due/overdue invoices.
 - **Reminders & Notifications** powered by the browser Notification API—earn points for responding to alerts.
 - **AI Game Master** (OpenAI Chat Completions) that narrates quests, congratulates wins, and nudges you when supplies run low.
 - **Household Guild** so family or roommates can join via invite code, compare streaks, and tackle seasonal challenges together.
+- **Personal Growth Layer** to track fitness, reading, savings, or custom missions that feed into the household health bar and reward milestones.
 - **Tailwind UI** with dark mode, responsive layouts, and emoji-rich feedback for a playful experience.
 
 ## Getting Started

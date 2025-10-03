@@ -6,6 +6,7 @@ export const POINT_REWARDS = {
   inventoryRestock: 6,
   billPaidOnTime: 15,
   reminderResponse: 8,
+  goalMilestone: 20,
 };
 
 const LEVELS = [
@@ -29,6 +30,7 @@ export const initialGamificationState = {
     billsPaidOnTime: 0,
     essentialsTracked: 0,
     consecutivePreparedDays: 0,
+    goalsCompleted: 0,
   },
   lastReminderAcknowledged: null,
 };
@@ -38,13 +40,26 @@ export function getLevelForPoints(points) {
   return tier ? tier.name : LEVELS[0].name;
 }
 
-export function calculateHouseholdHealth(inventory, bills) {
+export function calculateGoalMomentum(goals = []) {
+  if (!goals.length) return 1;
+  const ratios = goals.map((goal) => {
+    if (!goal || typeof goal.target !== 'number' || goal.target <= 0) return 1;
+    const progress = Math.max(0, Number(goal.progress ?? 0));
+    return Math.min(1, progress / goal.target);
+  });
+  const total = ratios.reduce((acc, value) => acc + value, 0);
+  return Math.min(1, total / ratios.length);
+}
+
+export function calculateHouseholdHealth(inventory, bills, goals = []) {
   const lowItems = getLowInventoryItems(inventory).length;
   const overdueBills = bills.filter((bill) => daysUntil(bill.dueDate) < 0).length;
+  const goalMomentum = calculateGoalMomentum(goals);
 
   let score = 100;
   score -= lowItems * 12;
   score -= overdueBills * 18;
+  score -= Math.round((1 - goalMomentum) * 20);
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   let status = 'secure';
@@ -57,6 +72,7 @@ export function calculateHouseholdHealth(inventory, bills) {
   return {
     score,
     status,
+    goalMomentum,
     colorClass:
       status === 'secure'
         ? 'bg-green-500'
@@ -140,6 +156,21 @@ export function registerBillPaid(state, { billName, onTime }) {
   return updated;
 }
 
+export function registerGoalMilestone(state, { goalName }) {
+  const updated = awardPoints(state, {
+    type: 'goalMilestone',
+    message: `🎮 Earned ${POINT_REWARDS.goalMilestone} points for completing ${goalName}.`,
+    metadata: { goalName },
+  });
+  return {
+    ...updated,
+    counters: {
+      ...updated.counters,
+      goalsCompleted: (updated.counters?.goalsCompleted ?? 0) + 1,
+    },
+  };
+}
+
 export function registerReminderResponse(state) {
   const updated = awardPoints(state, {
     type: 'reminderResponse',
@@ -168,6 +199,10 @@ export function evaluateBadges(state, inventory, bills) {
 
   if ((state.counters?.essentialsTracked ?? 0) >= 10) {
     badges.add('Resilient Household');
+  }
+
+  if ((state.counters?.goalsCompleted ?? 0) >= 5) {
+    badges.add('Personal Vanguard');
   }
 
   return { ...state, badges: [...badges] };

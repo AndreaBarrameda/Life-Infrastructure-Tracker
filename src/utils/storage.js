@@ -4,6 +4,7 @@ const PREFS_KEY = 'life-infrastructure-preferences';
 const REMINDER_KEY = 'life-infrastructure-last-reminder';
 const GAMIFICATION_KEY = 'life-infrastructure-gamification';
 const MEMBERS_KEY = 'life-infrastructure-members';
+const GOALS_KEY = 'life-infrastructure-goals';
 
 const isBrowser = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
@@ -75,4 +76,12 @@ export function loadMembers() {
 
 export function saveMembers(members) {
   writeJson(MEMBERS_KEY, members);
+}
+
+export function loadGoals() {
+  return readJson(GOALS_KEY, []);
+}
+
+export function saveGoals(goals) {
+  writeJson(GOALS_KEY, goals);
 }
